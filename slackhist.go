@@ -47,7 +47,7 @@ var metadata = make(map[string][]meta)
 func main() {
 
 	app := cli.NewApp()
-	app.Usage = "An app for exporting Slack history to CSV"
+	app.Usage = "An app for exporting Slack history to Excel (.xlsx)"
 	app.HideVersion = true
 
 	app.Flags = []cli.Flag{

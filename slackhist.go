@@ -4,10 +4,12 @@ import (
 	"archive/zip"
 	"encoding/json"
 	"fmt"
-	// "github.com/codegangsta/cli"
-	// "os"
+	"github.com/codegangsta/cli"
+	"github.com/tealeg/xlsx"
+	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,52 +20,94 @@ type message struct {
 	Timestamp                     time.Time
 }
 
+// Implement the sort interface for type messages
+type messages []message
+
+func (m messages) Len() int {
+	return len(m)
+}
+
+func (m messages) Less(i, j int) bool {
+	return m[i].Timestamp.Before(m[j].Timestamp)
+}
+
+func (m messages) Swap(i, j int) {
+	m[i], m[j] = m[j], m[i]
+}
+
 type meta struct {
 	ID, Name string
 	RealName string `json:"real_name,omitempty"`
 }
 
-// TODO: Improve overall concurrency / reliability
+// Set global CLI vars
+var filename, outputDir, timezone string
+var metadata = make(map[string][]meta)
 
 func main() {
-	metadata := make(map[string][]meta)
-	processData("temp/export.zip", metadata)
 
-	// NOTE: Turning this off for now until the main function of this application
-	// is working and ready to add additional flags/features
-	//
-	// app := cli.NewApp()
-	// app.Usage = "An app for exporting Slack history to CSV"
-	//
-	// app.Flags = []cli.Flag{
-	// 	cli.StringFlag{
-	// 		Name: "single, s",
-	// 	},
-	// }
-	//
-	// app.Action = func(c *cli.Context) {
-	// 	if c.String("single") != "" {
-	// 		fmt.Println("Exporting a single channel...")
-	// 		processData(c.String("single"), metadata)
-	// 	}
-	// }
-	//
-	// app.Run(os.Args)
+	app := cli.NewApp()
+	app.Usage = "An app for exporting Slack history to CSV"
+	app.HideVersion = true
+
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:        "name, n",
+			Value:       time.Now().Format("2006-Jan-02") + "_SlackExport.xlsx",
+			Usage:       "Set the name of the exported spreadsheet",
+			Destination: &filename,
+		},
+		cli.StringFlag{
+			Name:        "destination, d",
+			Value:       "./",
+			Usage:       "Specify the output directory for\n\t  the exported xlsx workbook",
+			Destination: &outputDir,
+		},
+		cli.StringFlag{
+			Name:        "timezone, t",
+			Value:       "Local",
+			Usage:       "Specify an alternate timezone.\n\t  See here for available options https://goo.gl/Tmq0oR",
+			Destination: &timezone,
+		},
+	}
+
+	app.Action = func(c *cli.Context) {
+		if len(c.Args()) != 1 {
+			fmt.Printf("\n*** Error: The location of the target zip file must be the last and only argument!\n***\n" +
+				"*** For additional help, enter \"slackhist help\"\n\n")
+			os.Exit(1)
+		}
+
+		if suffix := strings.HasSuffix(filename, ".xlsx"); suffix == false {
+			filename = filename + ".xlsx"
+		}
+
+		messages := processData(c.Args()[0], metadata)
+		createWorkbook(messages)
+	}
+
+	app.Run(os.Args)
 }
 
-// FIXME: Concurrency issue with this function. Add data channels/workers to make
-// sure that the process isn't ending before the worker is done.
-func processData(f string, md map[string][]meta) map[string][]message {
+func processData(f string, md map[string][]meta) map[string]messages {
 
-	payload := make(map[string][]message)
+	payload := make(map[string]messages)
 	var dirname string
 
-	// Open a readable stream from teh zip file
+	// Open a readable stream from the zip file
 	r, err := zip.OpenReader(f)
 	if err != nil {
 		panic(err)
 	}
 	defer r.Close()
+
+	// Collect the required meta to process the information HACK
+	for _, file := range r.File {
+		switch file.FileHeader.Name {
+		case "channels.json", "users.json":
+			getMeta(file, md)
+		}
+	}
 
 	// For every item in the entire zip folder (recursive)
 	for _, file := range r.File {
@@ -89,13 +133,11 @@ func processData(f string, md map[string][]meta) map[string][]message {
 		case false:
 			var thisJSON []message
 
-			// Switch on filename
+			// If the file is one that we've already processed, break
+			// from this particular loop cycle
 			switch file.FileHeader.Name {
-			case "integration_logs.json":
-				break
-			case "channels.json", "users.json":
-				getMeta(file, md)
-				break
+			case "integration_logs.json", "channels.json", "users.json":
+				continue
 			}
 
 			// Grab the parent directory's name
@@ -123,16 +165,16 @@ func processData(f string, md map[string][]meta) map[string][]message {
 				if value.Type == "message" && value.Subtype == "" || value.Subtype == "file_share" {
 
 					value.Timestamp = parseTimestamp(value.Ts)
-					value.User = parseUser(value.User, md)
+					_, value.User = parseUser(value.User, md)
 
 					re := regexp.MustCompile("(<@[a-zA-Z0-9]{9}(\\p{S}[a-zA-Z0-9]+)?>)")
 					if matches := re.FindAllString(value.Text, -1); matches != nil {
 
 						value.Text = re.ReplaceAllStringFunc(value.Text, func(match string) string {
 							uid := match[2 : len(match)-1]
-							return "@" + parseUserShortName(uid, md)
+							username, _ := parseUser(uid, md)
+							return "@" + username
 						})
-						fmt.Println(value.Text)
 
 					}
 
@@ -144,18 +186,59 @@ func processData(f string, md map[string][]meta) map[string][]message {
 
 	}
 
-	// NOTE: This iteration is for debugging purposes only -- remove from final
-	for masterkey, mastervalue := range payload {
-		fmt.Printf("======================KEY======================\n%v\n===============================================\n\n\n", masterkey)
-		for key, value := range mastervalue {
-			fmt.Printf("Key: %v\n\n"+
-				"Timestamp: %v\nUser: %v\nMessage: %v\n----------\n\n", key, value.Timestamp, value.User, value.Text)
-		}
-	}
-
 	return payload
 
 }
+
+func createWorkbook(m map[string]messages) {
+
+	var channelNames sort.StringSlice
+
+	workbook := xlsx.NewFile()
+	fullPath := filepath.Clean(filepath.Join(outputDir, filename))
+
+	// First, sort the map by channel name
+	for channel := range m {
+		channelNames = append(channelNames, channel)
+	}
+
+	channelNames.Sort()
+
+	for _, channel := range channelNames {
+		sheet, err := workbook.AddSheet(channel)
+		if err != nil {
+			panic(err)
+		}
+
+		sort.Sort(m[channel])
+
+		headingRow := sheet.AddRow()
+		headingRow.AddCell().SetString("Timestamp")
+		headingRow.AddCell().SetString("User")
+		headingRow.AddCell().SetString("Message")
+
+		for _, message := range m[channel] {
+			messageRow := sheet.AddRow()
+			messageRow.AddCell().SetString(message.Timestamp.Format("Jan 02, 2006 | 15:04"))
+			messageRow.AddCell().SetString(message.User)
+			messageRow.AddCell().SetString(message.Text)
+		}
+
+	}
+
+	if err := os.MkdirAll(filepath.Dir(fullPath), os.ModePerm); err != nil {
+		panic(err)
+	}
+
+	if err := workbook.Save(fullPath); err != nil {
+		panic(err)
+	}
+
+}
+
+/**************************************************************************
+ *                         Utility functions                              *
+ **************************************************************************/
 
 func getMeta(f *zip.File, m map[string][]meta) {
 	filename := f.FileHeader.Name
@@ -194,9 +277,7 @@ func parseTimestamp(ts string) time.Time {
 	}
 	tm := time.Unix(timestring, 0)
 
-	// TODO: Eventually make a flag that allows the user to override
-	// the default time zone to whatever time zone they choose
-	loc, err := time.LoadLocation("Local")
+	loc, err := time.LoadLocation(timezone)
 	if err != nil {
 		panic(err)
 	}
@@ -204,25 +285,14 @@ func parseTimestamp(ts string) time.Time {
 	return tm.In(loc)
 }
 
-func parseUser(uid string, md map[string][]meta) string {
-	var username string
-	for _, value := range md["users"] {
-		if value.ID == uid {
-			username = value.RealName
-			break
-		}
-	}
-	return username
-}
-
-// TODO: Delete this function and combine it with above
-func parseUserShortName(uid string, md map[string][]meta) string {
-	var username string
-	for _, value := range md["users"] {
+func parseUser(uid string, m map[string][]meta) (string, string) {
+	var username, realname string
+	for _, value := range m["users"] {
 		if value.ID == uid {
 			username = value.Name
+			realname = value.RealName
 			break
 		}
 	}
-	return username
+	return username, realname
 }

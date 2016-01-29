@@ -220,6 +220,14 @@ func createWorkbook(m map[string]messages) {
 		headingRow.AddCell().SetString("User")
 		headingRow.AddCell().SetString("Message")
 
+		if err := sheet.SetColWidth(0, 1, 20); err != nil {
+			panic(err)
+		}
+
+		if err := sheet.SetColWidth(2, 2, 200); err != nil {
+			panic(err)
+		}
+
 		for _, message := range m[channel] {
 			messageRow := sheet.AddRow()
 			messageRow.AddCell().SetString(message.Timestamp.Format("Jan 02, 2006 | 15:04"))

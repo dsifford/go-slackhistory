@@ -210,7 +210,7 @@ func createWorkbook(m map[string]messages) {
 			panic(err)
 		}
 
-		sort.Sort(m[channel])
+		sort.Sort(sort.Reverse(m[channel]))
 
 		headingRow := sheet.AddRow()
 		headingRow.AddCell().SetString("Timestamp")

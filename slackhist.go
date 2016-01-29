@@ -167,11 +167,14 @@ func processData(f string, md map[string][]meta) map[string]messages {
 					value.Timestamp = parseTimestamp(value.Ts)
 					_, value.User = parseUser(value.User, md)
 
-					re := regexp.MustCompile("(<@[a-zA-Z0-9]{9}(\\p{S}[a-zA-Z0-9]+)?>)")
+					re := regexp.MustCompile(`(<@[a-zA-Z0-9]{9}(\|[a-zA-Z0-9._]+)?>)`)
 					if matches := re.FindAllString(value.Text, -1); matches != nil {
 
 						value.Text = re.ReplaceAllStringFunc(value.Text, func(match string) string {
 							uid := match[2 : len(match)-1]
+							if value.Subtype == "file_share" {
+								uid = strings.Split(uid, "|")[0]
+							}
 							username, _ := parseUser(uid, md)
 							return "@" + username
 						})

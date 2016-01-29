@@ -9,8 +9,8 @@ cd $GOPATH/src/github.com/dsifford
 go install
 ```
 **Don't have Go installed?**
-- **OSX/Linux**: Download a pre-built binary from [releases](#) and save the file to your `usr/local/bin` directory.
-- **Windows**: Download a pre-built executable file from [releases](#), save it wherever you'd like, and include that directory in your `PATH`.
+- **OSX/Linux**: Download a pre-built binary from [releases](https://github.com/dsifford/slackhist/releases) and save the file to your `usr/local/bin` directory.
+- **Windows**: Download a pre-built executable file from [releases](https://github.com/dsifford/slackhist/releases), save it wherever you'd like, and include that directory in your `PATH`.
 
 ### Usage
 ![helptext](http://i.imgur.com/xSlguN5.png)

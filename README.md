@@ -26,6 +26,12 @@ go install
 - `-d, --destination`: Changes the output directory (Default: the current working directory)
 - `-t, --timezone`: Changes the time-zone parsing of each message timestamp (Default: your local timezone)
 
+### Benchmarks (34 Channels, 824 Messages)
+#### Version 0.0.0
+|real|user|sys|
+|---|---|---|
+`0m0.846s`|`0m1.128s`|`0m0.088s`
+
 ### Todo...
 - [ ] Refactor
 - [ ] Improve concurrency

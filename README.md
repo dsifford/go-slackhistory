@@ -25,3 +25,9 @@ go install
 - `-n, --name`: Renames the output file (Default `YYYY-MMM-DD_SlackExport.xlsx`)
 - `-d, --destination`: Changes the output directory (Default: the current working directory)
 - `-t, --timezone`: Changes the time-zone parsing of each message timestamp (Default: your local timezone)
+
+### Todo...
+- [ ] Refactor
+- [ ] Improve concurrency
+- [ ] Add tests
+- [ ] Compile for Windows (64 and 32 bit)

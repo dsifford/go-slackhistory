@@ -118,7 +118,7 @@ func processData(f string, md map[string][]meta) map[string]messages {
 		switch isDirectory {
 		case true:
 
-			// Retreive the current directory's base name
+			// Retrieve the current directory's base name
 			path, err := filepath.Abs(file.FileHeader.Name)
 			if err != nil {
 				panic(err)

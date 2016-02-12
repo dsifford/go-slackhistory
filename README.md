@@ -1,3 +1,4 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/dsifford/slackhist)](https://goreportcard.com/report/github.com/dsifford/slackhist)
 ## slackhist
 A command-line utility for exporting Slack history to Excel (`.xlsx`)
 
